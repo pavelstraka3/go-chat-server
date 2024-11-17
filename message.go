@@ -1,8 +1,32 @@
 package main
 
 import (
+	"encoding/json"
+	"github.com/gorilla/websocket"
 	"strings"
 )
+
+const (
+	SystemMessage = "system"
+	ChatMessage   = "chat"
+)
+
+type Message struct {
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
+func sendMessage(conn *websocket.Conn, msgType, content string) error {
+	message := Message{
+		Type:    msgType,
+		Content: content,
+	}
+	msgBytes, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	return conn.WriteMessage(websocket.TextMessage, msgBytes)
+}
 
 type MessageType int
 

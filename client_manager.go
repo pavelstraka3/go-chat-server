@@ -150,7 +150,7 @@ func (cm *ClientManager) BroadcastMessageToRoom(roomName string, message []byte)
 	room.History = append(room.History, string(message))
 
 	for _, client := range room.Clients {
-		if err := client.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
+		if err := sendMessage(client.Conn, ChatMessage, string(message)); err != nil {
 			log.Printf("Error sending message to client %s: %v\n", client.Username, err)
 		}
 	}
