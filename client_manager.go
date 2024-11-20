@@ -137,7 +137,7 @@ func (cm *ClientManager) JoinRoom(roomName string, client *Client) {
 	client.ChatRoom = room
 }
 
-func (cm *ClientManager) BroadcastMessageToRoom(roomName string, message []byte) {
+func (cm *ClientManager) BroadcastMessageToRoom(roomName string, message []byte, user string) {
 	cm.Lock.Lock()
 	defer cm.Lock.Unlock()
 
@@ -150,7 +150,7 @@ func (cm *ClientManager) BroadcastMessageToRoom(roomName string, message []byte)
 	room.History = append(room.History, string(message))
 
 	for _, client := range room.Clients {
-		if err := sendMessage(client.Conn, ChatMessage, string(message)); err != nil {
+		if err := sendMessage(client.Conn, ChatMessage, string(message), user); err != nil {
 			log.Printf("Error sending message to client %s: %v\n", client.Username, err)
 		}
 	}

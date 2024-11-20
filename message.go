@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"strings"
 )
@@ -14,12 +15,20 @@ const (
 type Message struct {
 	Type    string `json:"type"`
 	Content string `json:"content"`
+	Sender  string `json:"sender"`
+	Id      string `json:"id"`
 }
 
-func sendMessage(conn *websocket.Conn, msgType, content string) error {
+func generateId() string {
+	return uuid.New().String()
+}
+
+func sendMessage(conn *websocket.Conn, msgType, content string, user string) error {
 	message := Message{
 		Type:    msgType,
 		Content: content,
+		Sender:  user,
+		Id:      generateId(),
 	}
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
