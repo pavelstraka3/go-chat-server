@@ -4,31 +4,30 @@ import (
 	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"strings"
-)
-
-const (
-	SystemMessage = "system"
-	ChatMessage   = "chat"
 )
 
 type Message struct {
-	Type    string `json:"type"`
-	Content string `json:"content"`
-	Sender  string `json:"sender"`
-	Id      string `json:"id"`
+	Type    MessageType `json:"type"`
+	Content string      `json:"content"`
+	Sender  string      `json:"sender"`
+	Id      string      `json:"id"`
+	Room    string      `json:"room,omitempty"`
+	Target  string      `json:"target,omitempty"`
 }
 
 func generateId() string {
 	return uuid.New().String()
 }
 
-func sendMessage(conn *websocket.Conn, msgType, content string, user string) error {
+func sendMessage(conn *websocket.Conn, msgType MessageType, content string, user string, room string) error {
 	message := Message{
 		Type:    msgType,
 		Content: content,
 		Sender:  user,
 		Id:      generateId(),
+	}
+	if msgType != SystemMessage {
+		message.Room = room
 	}
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
@@ -37,13 +36,14 @@ func sendMessage(conn *websocket.Conn, msgType, content string, user string) err
 	return conn.WriteMessage(websocket.TextMessage, msgBytes)
 }
 
-type MessageType int
+type MessageType string
 
 const (
-	RegularMessage MessageType = iota
-	DirectMessage
-	InvalidMessage
-	CommandMessage
+	RegularMessage MessageType = "regular"
+	DirectMessage              = "direct"
+	InvalidMessage             = "invalid"
+	CommandMessage             = "command"
+	SystemMessage              = "system"
 )
 
 type CommandType int
@@ -60,65 +60,83 @@ type ParsedMessage struct {
 	Content string
 	Target  string
 	Command CommandType
+	Room    string
 }
 
-func parseMessage(message string) ParsedMessage {
-	// check for direct message pattern
-	if strings.HasPrefix(message, "/dm") {
-		parts := strings.SplitN(string(message), " ", 3)
+func parseMessage(rawMessage string, room string) ParsedMessage {
+	// Attempt to parse the incoming JSON
+	var message Message
+	err := json.Unmarshal([]byte(rawMessage), &message)
+	if err != nil {
+		return ParsedMessage{
+			Type:    InvalidMessage,
+			Content: "Invalid message format. Ensure your message is valid JSON.",
+		}
+	}
 
-		if len(parts) < 3 {
+	// check for message type and return parsed message
+	switch message.Type {
+	case DirectMessage:
+		if message.Target == "" || message.Content == "" {
 			return ParsedMessage{
 				Type:    InvalidMessage,
-				Content: "Invalid DM format. Use: /dm <username> <message>",
+				Content: "Invalid DM format.",
 			}
 		}
-
 		return ParsedMessage{
 			Type:    DirectMessage,
-			Content: parts[2],
-			Target:  parts[1],
+			Content: message.Content,
+			Target:  message.Target,
 		}
-	}
+	case CommandMessage:
+		switch message.Content {
+		case "help":
+			return ParsedMessage{
+				Type:    CommandMessage,
+				Content: "Available commands: /dm <username> <message> - Send a direct message\n /users - List of connected users",
+				Command: HelpCommand,
+			}
+		case "users":
+			return ParsedMessage{
+				Type:    CommandMessage,
+				Content: "user_list",
+				Command: UsersCommand,
+			}
+		case "join":
+			if message.Room == "" {
+				return ParsedMessage{
+					Type:    InvalidMessage,
+					Content: "Invalid room format. Use: {\"type\": \"command\", \"content\": \"join\", \"room\": \"roomName\"}",
+				}
+			}
+			return ParsedMessage{
+				Type:    CommandMessage,
+				Command: JoinCommand,
+				Content: message.Room,
+			}
 
-	// check for system commands
-	if strings.HasPrefix(message, "/help") {
-		return ParsedMessage{
-			Type:    CommandMessage,
-			Content: "Available commands: /dm <username> <message> - Send a direct message\n /users - List of connected users",
-			Command: HelpCommand,
-		}
-	}
-
-	// list of users
-	if strings.HasPrefix(message, "/users") {
-		return ParsedMessage{
-			Type:    CommandMessage,
-			Content: "user_list",
-			Command: UsersCommand,
-		}
-	}
-
-	// join room
-	if strings.HasPrefix(message, "/join") {
-		parts := strings.SplitN(message, " ", 2)
-		if len(parts) < 2 {
+		default:
 			return ParsedMessage{
 				Type:    InvalidMessage,
-				Content: "Invalid room format. Use: /join <roomName>",
+				Content: "Unknown command.",
 			}
 		}
-
-		return ParsedMessage{
-			Type:    CommandMessage,
-			Command: JoinCommand,
-			Content: parts[1],
+	case RegularMessage:
+		if message.Content == "" {
+			return ParsedMessage{
+				Type:    InvalidMessage,
+				Content: "Chat message cannot be empty.",
+			}
 		}
-	}
-
-	// Otherwise it's regular message
-	return ParsedMessage{
-		Type:    RegularMessage,
-		Content: message,
+		return ParsedMessage{
+			Type:    RegularMessage,
+			Content: message.Content,
+			Room:    message.Room,
+		}
+	default:
+		return ParsedMessage{
+			Type:    InvalidMessage,
+			Content: "Unknown message type.",
+		}
 	}
 }

@@ -45,12 +45,6 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 		}
 		defer conn.Close()
 
-		// Request username from client
-		if err := sendMessage(conn, SystemMessage, "Please enter your username:", "system"); err != nil {
-			log.Println("Error sending message: ", err)
-			return
-		}
-
 		clientID := uuid.New().String()
 		client := &Client{
 			Conn:     conn,
@@ -58,11 +52,11 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 		}
 		manager.AddClient(clientID, client)
 
-		// Initial room setup: Ask the client which room to join
-		if err := sendMessage(conn, SystemMessage, "Please type a room name to join:", "system"); err != nil {
-			log.Printf("Error sending message: %v", err)
-			return
-		}
+		manager.JoinRoom("general", client)
+		sendMessage(conn, SystemMessage, "You have joined the room: general", "system", "general")
+
+		// Notify room members
+		manager.BroadcastMessageToRoom("general", []byte(fmt.Sprintf("%s has joined the room.", username)), "system")
 
 		// Listen for messages from client
 		for {
@@ -73,11 +67,11 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 			}
 
 			// parse the message
-			parsedMessage := parseMessage(string(message))
+			parsedMessage := parseMessage(string(message), client.ChatRoom.Name)
 
 			// Check if the client has joined a room
 			if client.ChatRoom == nil && parsedMessage.Type != CommandMessage {
-				sendMessage(conn, SystemMessage, "You must join a room first. Use /join <roomName>", "system")
+				sendMessage(conn, SystemMessage, "You must join a room first. Use /join <roomName>", "system", "")
 				continue
 			}
 
@@ -90,9 +84,9 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 				log.Printf("[DM from %s to %s]: %s\n", username, parsedMessage.Target, parsedMessage.Content)
 				targetClient := manager.FindClientByUsername(parsedMessage.Target)
 				if targetClient != nil {
-					sendMessage(targetClient.Conn, ChatMessage, parsedMessage.Content, username)
+					sendMessage(targetClient.Conn, DirectMessage, parsedMessage.Content, username, "")
 				} else {
-					sendMessage(conn, SystemMessage, fmt.Sprintf("User %s not found.", parsedMessage.Target), "system")
+					sendMessage(conn, SystemMessage, fmt.Sprintf("User %s not found.", parsedMessage.Target), "system", "")
 				}
 			case CommandMessage:
 				switch parsedMessage.Command {
@@ -103,11 +97,11 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 							sb.WriteString(key + "\n")
 						}
 					}
-					sendMessage(conn, SystemMessage, sb.String(), "system")
+					sendMessage(conn, SystemMessage, sb.String(), "system", "")
 				case JoinCommand:
 					roomName := parsedMessage.Content
 					manager.JoinRoom(roomName, client)
-					sendMessage(conn, SystemMessage, fmt.Sprintf("You have joined the room: %s", roomName), "system")
+					sendMessage(conn, SystemMessage, fmt.Sprintf("You have joined the room: %s", roomName), "system", roomName)
 
 					for _, msg := range client.ChatRoom.History {
 						if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
@@ -118,10 +112,10 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 					// Notify room members
 					manager.BroadcastMessageToRoom(roomName, []byte(fmt.Sprintf("%s has joined the room.", username)), "system")
 				default:
-					sendMessage(conn, SystemMessage, "Invalid command. Use /help for a list of commands.", "system")
+					sendMessage(conn, SystemMessage, "Invalid command. Use /help for a list of commands.", "system", "")
 				}
 			case InvalidMessage:
-				sendMessage(conn, SystemMessage, parsedMessage.Content, "system")
+				sendMessage(conn, SystemMessage, parsedMessage.Content, "system", "")
 			}
 		}
 
