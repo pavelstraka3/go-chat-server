@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -21,6 +23,21 @@ func ping(w http.ResponseWriter, r *http.Request) {
 
 func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Extract the token from query parameters
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			http.Error(w, "Missing token", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate the JWT token
+		username, err := validateJWT(token)
+		if err != nil {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		// Upgrade the HTTP connection to a WebSocket connection
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Println("Error upgrading to WebSocket: ", err)
@@ -33,27 +50,6 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 			log.Println("Error sending message: ", err)
 			return
 		}
-
-		// Read the username
-		_, usernameMessage, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("Error reading username: %v", err)
-			return
-		}
-
-		username := string(usernameMessage)
-
-		// Validate the username
-		isValid, reason := manager.IsValidUsername(username)
-		if !isValid {
-			errMsg := fmt.Sprintf("Invalid username: %s", reason)
-			sendMessage(conn, SystemMessage, errMsg, "system")
-			return
-		}
-
-		// Reserve the username
-		manager.ReserveUsername(username)
-		log.Printf("Client connected with username: %s\n", username)
 
 		clientID := uuid.New().String()
 		client := &Client{
@@ -133,5 +129,74 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 		manager.RemoveClient(clientID)
 		manager.ReleaseUsername(username)
 		manager.BroadcastMessage([]byte(fmt.Sprintf("[Server]: %s has left the chat.", username)))
+	}
+}
+
+func handleRegisterUser(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var user User
+		err := json.NewDecoder(r.Body).Decode(&user)
+		if err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// register the user
+		err = registerUser(db, user.Username, user.Password)
+		if err != nil {
+			http.Error(w, "Registration failed: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte("User registered successfully"))
+	}
+}
+
+func handleLoginUser(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var user User
+		err := json.NewDecoder(r.Body).Decode(&user)
+		if err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		isValid, err := loginUser(db, user.Username, user.Password)
+		if err != nil {
+			http.Error(w, "Login failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if !isValid {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			return
+		}
+
+		// Gnerate JWT token
+		token, err := generateJWT(user.Username)
+		if err != nil {
+			http.Error(w, "Failed to generate JWT token", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{
+			"token": token,
+		})
+	}
+}
+
+func handleGetUsers(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		users, err := getAllUsers(db)
+		if err != nil {
+			http.Error(w, "Failed to get users: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(users)
 	}
 }
