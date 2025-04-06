@@ -31,3 +31,32 @@ func createUserTable(db *sql.DB) {
 		log.Fatalf("Error creating users table: %v", err)
 	}
 }
+
+func creatRoomTable(db *sql.DB) {
+	query := `
+	CREATE TABLE IF NOT EXISTS rooms (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT UNIQUE NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+	if _, err := db.Exec(query); err != nil {
+		log.Fatalf("Error creating rooms table: %v", err)
+	}
+}
+
+func createMessageTable(db *sql.DB) {
+	query := `
+		CREATE TABLE messages (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		room_id INTEGER NOT NULL,
+		sender TEXT NOT NULL,
+		content TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (room_id) REFERENCES rooms (id)
+	);`
+
+	if _, err := db.Exec(query); err != nil {
+		log.Fatalf("Error creating rooms table: %v", err)
+	}
+}

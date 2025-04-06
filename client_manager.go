@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
@@ -11,23 +12,25 @@ import (
 type Client struct {
 	Username string
 	Conn     *websocket.Conn
-	ChatRoom *ChatRoom
+	ChatRoom *Room
 }
 
 type ClientManager struct {
 	Clients   map[string]*Client
 	Usernames map[string]bool
 	History   []string
-	Rooms     map[string]*ChatRoom
+	Rooms     map[string]*Room
 	Lock      sync.Mutex
+	Db        *sql.DB
 }
 
-func NewClientManager() *ClientManager {
+func NewClientManager(db *sql.DB) *ClientManager {
 	return &ClientManager{
 		Clients:   make(map[string]*Client),
 		Usernames: make(map[string]bool),
 		History:   make([]string, 0),
-		Rooms:     make(map[string]*ChatRoom),
+		Rooms:     make(map[string]*Room),
+		Db:        db,
 	}
 }
 
@@ -110,14 +113,14 @@ func (cm *ClientManager) FindClientByUsername(username string) *Client {
 	return nil
 }
 
-func (cm *ClientManager) GetOrCreateRoom(roomName string) *ChatRoom {
+func (cm *ClientManager) GetOrCreateRoom(roomName string) *Room {
 	cm.Lock.Lock()
 	defer cm.Lock.Unlock()
 
 	room, exists := cm.Rooms[roomName]
 	if !exists {
 		// if the room doesn't exist, create it
-		room = &ChatRoom{
+		room = &Room{
 			Name:    roomName,
 			Clients: make(map[string]*Client),
 		}
@@ -131,10 +134,33 @@ func (cm *ClientManager) GetOrCreateRoom(roomName string) *ChatRoom {
 	return room
 }
 
-func (cm *ClientManager) JoinRoom(roomName string, client *Client) {
-	room := cm.GetOrCreateRoom(roomName)
-	room.Clients[client.Username] = client
-	client.ChatRoom = room
+func (cm *ClientManager) JoinRoom(roomName string, client *Client) error {
+	cm.Lock.Lock()
+	defer cm.Lock.Unlock()
+
+	room, err := getRoomByName(cm.Db, roomName)
+
+	if err != nil {
+		return err
+	}
+
+	if room == nil {
+		// If room doesn't exist, create it
+		_, err := createRoom(cm.Db, roomName)
+		if err != nil {
+			return fmt.Errorf("failed to create room: %w", err)
+		}
+	}
+
+	chatRoom, err := createRoom(cm.Db, roomName)
+	if err != nil {
+		return fmt.Errorf("failed to create room: %w", err)
+	}
+	client.ChatRoom = chatRoom
+
+	log.Printf("Client %s joined room %s", client.Username, roomName)
+
+	return nil
 }
 
 func (cm *ClientManager) BroadcastMessageToRoom(roomName string, message []byte, user string) {

@@ -26,8 +26,10 @@ func main() {
 
 	mux := http.NewServeMux()
 	createUserTable(db)
+	creatRoomTable(db)
+	createMessageTable(db)
 
-	manager := NewClientManager()
+	manager := NewClientManager(db)
 
 	mux.HandleFunc("/ping", ping)
 	mux.HandleFunc("/ws", handleWebSocket(manager))
