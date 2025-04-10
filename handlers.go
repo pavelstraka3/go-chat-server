@@ -136,7 +136,7 @@ func handleRegisterUser(db *sql.DB) http.HandlerFunc {
 		}
 
 		// register the user
-		err = registerUser(db, user.Username, user.Password)
+		err = registerUser(db, user.Email, user.Password)
 		if err != nil {
 			http.Error(w, "Registration failed: "+err.Error(), http.StatusBadRequest)
 			return
@@ -156,19 +156,19 @@ func handleLoginUser(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		isValid, err := loginUser(db, user.Username, user.Password)
+		isValid, err := loginUser(db, user.Email, user.Password)
 		if err != nil {
 			http.Error(w, "Login failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		if !isValid {
-			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			http.Error(w, "Invalid e-mail or password", http.StatusUnauthorized)
 			return
 		}
 
 		// Gnerate JWT token
-		token, err := generateJWT(user.Username)
+		token, err := generateJWT(user.Email)
 		if err != nil {
 			http.Error(w, "Failed to generate JWT token", http.StatusInternalServerError)
 			return

@@ -11,7 +11,7 @@ var jwtSecret = []byte("secret")
 func validateJWT(tokenString string) (string, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return jwtSecret, nil
 	})
@@ -25,13 +25,13 @@ func validateJWT(tokenString string) (string, error) {
 		return username, nil
 	}
 
-	return "", fmt.Errorf("Invalid token")
+	return "", fmt.Errorf("invalid token")
 }
 
-func generateJWT(username string) (string, error) {
+func generateJWT(email string) (string, error) {
 	claims := jwt.MapClaims{
-		"username": username,
-		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+		"email": email,
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

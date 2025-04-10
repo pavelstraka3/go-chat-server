@@ -23,7 +23,7 @@ func createUserTable(db *sql.DB) {
 	query := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		username TEXT UNIQUE NOT NULL,
+		email TEXT UNIQUE NOT NULL,
 		password TEXT NOT NULL
 	);
 	`
@@ -47,7 +47,7 @@ func creatRoomTable(db *sql.DB) {
 
 func createMessageTable(db *sql.DB) {
 	query := `
-		CREATE TABLE messages (
+		CREATE TABLE IF NOT EXISTS messages (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		room_id INTEGER NOT NULL,
 		sender TEXT NOT NULL,

@@ -6,31 +6,31 @@ import (
 )
 
 type User struct {
-	Username string `json:"username"`
+	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
-func registerUser(db *sql.DB, username, password string) error {
+func registerUser(db *sql.DB, email, password string) error {
 	// hash the password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	query := `INSERT INTO users (username, password) VALUES (?, ?);`
-	_, err = db.Exec(query, username, hashedPassword)
+	query := `INSERT INTO users (email, password) VALUES (?, ?);`
+	_, err = db.Exec(query, email, hashedPassword)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func loginUser(db *sql.DB, username, password string) (bool, error) {
+func loginUser(db *sql.DB, email, password string) (bool, error) {
 	var hashedPassword string
 
 	// retrieve the hashed password from the database
-	query := `SELECT password FROM users WHERE username = ?`
-	err := db.QueryRow(query, username).Scan(&hashedPassword)
+	query := `SELECT password FROM users WHERE email = ?`
+	err := db.QueryRow(query, email).Scan(&hashedPassword)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, nil // user does not exist
@@ -50,7 +50,7 @@ func loginUser(db *sql.DB, username, password string) (bool, error) {
 }
 
 func getAllUsers(db *sql.DB) ([]User, error) {
-	rows, err := db.Query("SELECT username FROM users")
+	rows, err := db.Query("SELECT email FROM users")
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func getAllUsers(db *sql.DB) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var user User
-		err := rows.Scan(&user.Username)
+		err := rows.Scan(&user.Email)
 		if err != nil {
 			return nil, err
 		}
