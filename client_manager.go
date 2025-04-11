@@ -126,6 +126,15 @@ func (cm *ClientManager) JoinRoom(roomName string, client *Client) error {
 	room.Clients[client.Email] = client
 	client.Room = room
 
+	// Notify other room members
+	for email, roomClient := range room.Clients {
+		if email != client.Email { // Don't notify the client who just joined
+			if err := sendMessage(roomClient.Conn, SystemMessage, fmt.Sprintf("%s has joined the room.", client.Email), "system", roomName); err != nil {
+				log.Printf("Error notifying client %s about join: %v\n", email, err)
+			}
+		}
+	}
+
 	log.Printf("Successfully joined room %s", roomName)
 	return nil
 }
@@ -138,7 +147,7 @@ func (cm *ClientManager) BroadcastMessageToRoom(roomName string, message []byte,
 
 	room, exists := cm.Rooms[roomName]
 	if !exists {
-		log.Printf("Room %s does no exist", roomName)
+		log.Printf("Room %s does not exist", roomName)
 		return
 	}
 

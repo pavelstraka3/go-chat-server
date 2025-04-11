@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -65,9 +66,6 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 
 		sendMessage(conn, SystemMessage, "You have joined the room: general", "system", "general")
 
-		// Notify room members
-		manager.BroadcastMessageToRoom("systen", []byte(fmt.Sprintf("%s has joined the room.", email)), "system")
-
 		// Listen for messages from client
 		for {
 			_, message, err := conn.ReadMessage()
@@ -91,13 +89,8 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 }
 
 func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientManager, message []byte, email string) error {
-	roomName := ""
-	if client.Room != nil {
-		roomName = client.Room.Name
-	}
-
 	// parse the message
-	parsedMessage := parseMessage(string(message), roomName)
+	parsedMessage := parseMessage(string(message))
 
 	// Check if the client has joined a room
 	if client.Room == nil && parsedMessage.Type != CommandMessage {
@@ -109,7 +102,7 @@ func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientMa
 	case RegularMessage:
 		log.Printf("[%s]: %s\n", email, parsedMessage.Content)
 		manager.BroadcastMessageToRoom(client.Room.Name, []byte(fmt.Sprintf(parsedMessage.Content)), email)
-		err := saveMessageToDb(manager.Db, parsedMessage, client.Room.ID, client.Email)
+		err := saveMessageToDb(manager.Db, parsedMessage, parsedMessage.Room.ID, client.Email)
 		if err != nil {
 			log.Printf("Error saving message to DB: %v", err)
 			sendMessage(conn, SystemMessage, "Error saving message to DB: "+err.Error(), "system", "")
@@ -221,5 +214,32 @@ func handleGetUsers(db *sql.DB) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(users)
+	}
+}
+
+func handleGetMessages(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		roomParam := r.URL.Query().Get("roomId")
+
+		if roomParam == "" {
+			http.Error(w, "Missing roomId", http.StatusBadRequest)
+			return
+		}
+
+		roomId, err := strconv.Atoi(roomParam)
+		if err != nil {
+			http.Error(w, "Invalid roomId", http.StatusBadRequest)
+			return
+		}
+		userEmail := r.URL.Query().Get("sender")
+
+		messages, err := getMessages(db, roomId, userEmail)
+		if err != nil {
+			http.Error(w, "Failed to get messages: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(messages)
 	}
 }

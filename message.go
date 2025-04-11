@@ -14,7 +14,7 @@ type Message struct {
 	Content   string      `json:"content"`
 	Sender    string      `json:"sender"`
 	Id        string      `json:"id"`
-	Room      string      `json:"room,omitempty"`
+	Room      Room        `json:"room,omitempty"`
 	Target    string      `json:"target,omitempty"`
 	Timestamp string      `json:"timestamp,omitempty"`
 }
@@ -31,8 +31,12 @@ func sendMessage(conn *websocket.Conn, msgType MessageType, content string, user
 		Id:        generateId(),
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
+
 	if msgType != SystemMessage {
-		message.Room = room
+		message.Room = Room{
+			ID:   0,
+			Name: room,
+		}
 	}
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
@@ -65,10 +69,10 @@ type ParsedMessage struct {
 	Content string
 	Target  string
 	Command CommandType
-	Room    string
+	Room    Room
 }
 
-func parseMessage(rawMessage string, room string) ParsedMessage {
+func parseMessage(rawMessage string) ParsedMessage {
 	log.Printf("Parsing message: %s", rawMessage)
 	// Attempt to parse the incoming JSON
 	var message Message
@@ -109,7 +113,7 @@ func parseMessage(rawMessage string, room string) ParsedMessage {
 				Command: UsersCommand,
 			}
 		case "join":
-			if message.Room == "" {
+			if message.Room.Name == "" {
 				return ParsedMessage{
 					Type:    InvalidMessage,
 					Content: "Invalid room format. Use: {\"type\": \"command\", \"content\": \"join\", \"room\": \"roomName\"}",
@@ -118,7 +122,7 @@ func parseMessage(rawMessage string, room string) ParsedMessage {
 			return ParsedMessage{
 				Type:    CommandMessage,
 				Command: JoinCommand,
-				Content: message.Room,
+				Content: message.Room.Name,
 			}
 
 		default:
@@ -163,4 +167,48 @@ func saveMessageToDb(db *sql.DB, message ParsedMessage, roomId int, sender strin
 
 	log.Printf("Message saved to DB: %s", message.Content)
 	return nil
+}
+
+func getMessages(db *sql.DB, roomId int, sender string) ([]Message, error) {
+	query := "SELECT messages.id, messages.content, rooms.name, messages.sender, messages.date, room_id roomId FROM messages LEFT JOIN rooms ON messages.room_id = rooms.id WHERE room_id = ?"
+	args := []interface{}{roomId}
+
+	if sender != "" {
+		query += " AND sender = ?"
+		args = append(args, sender)
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		log.Printf("Error retrieving messages from DB: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []Message
+	for rows.Next() {
+		var id, content, room, user, date string
+		if err := rows.Scan(&id, &content, &room, &user, &date); err != nil {
+			log.Printf("Error scanning message row: %v", err)
+			return nil, err
+		}
+		messages = append(messages, Message{
+			Id:      id,
+			Type:    RegularMessage,
+			Content: content,
+			Room: Room{
+				ID:   roomId,
+				Name: room,
+			},
+			Sender:    user,
+			Timestamp: date,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("Error iterating over message rows: %v", err)
+		return nil, err
+	}
+
+	return messages, nil
 }

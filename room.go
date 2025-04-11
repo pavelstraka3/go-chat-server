@@ -49,7 +49,7 @@ func getRoomByName(db *sql.DB, roomName string) (*Room, error) {
 	return &room, nil
 }
 
-func getRoomList(db *sql.DB) ([]Room, error) {
+func getAllRooms(db *sql.DB) ([]Room, error) {
 	query := "SELECT id, name, created_at FROM rooms"
 	rows, err := db.Query(query)
 	if err != nil {

@@ -36,6 +36,7 @@ func main() {
 	mux.HandleFunc("POST /register", handleRegisterUser(db))
 	mux.HandleFunc("POST /login", handleLoginUser(db))
 	mux.HandleFunc("GET /users", handleGetUsers(db))
+	mux.HandleFunc("GET /messages", handleGetMessages(db))
 
 	fmt.Println("Server started on port 8090")
 	if err := http.ListenAndServe(":8090", corsMiddleware(mux)); err != nil {
