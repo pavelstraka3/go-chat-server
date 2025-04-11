@@ -27,7 +27,9 @@ func createRoom(db *sql.DB, name string) (*Room, error) {
 		return nil, err
 	}
 
-	return room, err
+	room.Clients = make(map[string]*Client)
+	room.History = make([]string, 0)
+	return room, nil
 }
 
 func getRoomByName(db *sql.DB, roomName string) (*Room, error) {
@@ -39,7 +41,12 @@ func getRoomByName(db *sql.DB, roomName string) (*Room, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-	return &room, err
+	if err != nil {
+		return nil, err
+	}
+	room.Clients = make(map[string]*Client)
+	room.History = make([]string, 0)
+	return &room, nil
 }
 
 func getRoomList(db *sql.DB) ([]Room, error) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"log"
 )
 
 type Message struct {
@@ -64,6 +65,7 @@ type ParsedMessage struct {
 }
 
 func parseMessage(rawMessage string, room string) ParsedMessage {
+	log.Printf("Parsing message: %s", rawMessage)
 	// Attempt to parse the incoming JSON
 	var message Message
 	err := json.Unmarshal([]byte(rawMessage), &message)

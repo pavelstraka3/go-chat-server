@@ -18,7 +18,10 @@ var upgrader = websocket.Upgrader{
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello!")
+	_, err := fmt.Fprintf(w, "Hello!")
+	if err != nil {
+		return
+	}
 }
 
 func handleWebSocket(manager *ClientManager) http.HandlerFunc {
@@ -31,7 +34,7 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 		}
 
 		// Validate the JWT token
-		username, err := validateJWT(token)
+		email, err := validateJWT(token)
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
@@ -47,83 +50,106 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 
 		clientID := uuid.New().String()
 		client := &Client{
-			Conn:     conn,
-			Username: username,
+			Conn:  conn,
+			Email: email,
 		}
 		manager.AddClient(clientID, client)
 
-		manager.JoinRoom("general", client)
+		if err := manager.JoinRoom("general", client); err != nil {
+			log.Printf("Error joining room 'general': %v", err)
+			if err := sendMessage(conn, SystemMessage, "Failed to join room: "+err.Error(), "system", ""); err != nil {
+				log.Printf("Error sending failure message: %v", err)
+			}
+			return
+		}
+
 		sendMessage(conn, SystemMessage, "You have joined the room: general", "system", "general")
 
 		// Notify room members
-		manager.BroadcastMessageToRoom("general", []byte(fmt.Sprintf("%s has joined the room.", username)), "system")
+		manager.BroadcastMessageToRoom("systen", []byte(fmt.Sprintf("%s has joined the room.", email)), "system")
 
 		// Listen for messages from client
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Printf("Error reading message from %s\n %s: ", username, err)
+				log.Printf("Error reading message from %s\n %s: ", email, err)
 				break
 			}
 
-			// parse the message
-			parsedMessage := parseMessage(string(message), client.ChatRoom.Name)
+			//sendMessage(conn, SystemMessage, "Recieved message: "+string(message), "system", "system")
 
-			// Check if the client has joined a room
-			if client.ChatRoom == nil && parsedMessage.Type != CommandMessage {
-				sendMessage(conn, SystemMessage, "You must join a room first. Use /join <roomName>", "system", "")
-				continue
-			}
-
-			switch parsedMessage.Type {
-			case RegularMessage:
-				log.Printf("[%s]: %s\n", username, parsedMessage.Content)
-				manager.BroadcastMessageToRoom(client.ChatRoom.Name, []byte(fmt.Sprintf(parsedMessage.Content)), username)
-
-			case DirectMessage:
-				log.Printf("[DM from %s to %s]: %s\n", username, parsedMessage.Target, parsedMessage.Content)
-				targetClient := manager.FindClientByUsername(parsedMessage.Target)
-				if targetClient != nil {
-					sendMessage(targetClient.Conn, DirectMessage, parsedMessage.Content, username, "")
-				} else {
-					sendMessage(conn, SystemMessage, fmt.Sprintf("User %s not found.", parsedMessage.Target), "system", "")
-				}
-			case CommandMessage:
-				switch parsedMessage.Command {
-				case UsersCommand:
-					var sb strings.Builder
-					for key, val := range manager.Usernames {
-						if val {
-							sb.WriteString(key + "\n")
-						}
-					}
-					sendMessage(conn, SystemMessage, sb.String(), "system", "")
-				case JoinCommand:
-					roomName := parsedMessage.Content
-					manager.JoinRoom(roomName, client)
-					sendMessage(conn, SystemMessage, fmt.Sprintf("You have joined the room: %s", roomName), "system", roomName)
-
-					for _, msg := range client.ChatRoom.History {
-						if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
-							fmt.Println("Error sending history: ", err)
-							return
-						}
-					}
-					// Notify room members
-					manager.BroadcastMessageToRoom(roomName, []byte(fmt.Sprintf("%s has joined the room.", username)), "system")
-				default:
-					sendMessage(conn, SystemMessage, "Invalid command. Use /help for a list of commands.", "system", "")
-				}
-			case InvalidMessage:
-				sendMessage(conn, SystemMessage, parsedMessage.Content, "system", "")
+			if err := handleClientMessage(conn, client, manager, message, email); err != nil {
+				log.Printf("Error handling message: %v", err)
+				sendMessage(conn, SystemMessage, "Error handling message: "+err.Error(), "system", "error")
 			}
 		}
 
 		// Cleanup when the client disconnects
 		manager.RemoveClient(clientID)
-		manager.ReleaseUsername(username)
-		manager.BroadcastMessage([]byte(fmt.Sprintf("[Server]: %s has left the chat.", username)))
+		manager.BroadcastMessage([]byte(fmt.Sprintf("[Server]: %s has left the chat.", email)))
 	}
+}
+
+func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientManager, message []byte, email string) error {
+	roomName := ""
+	if client.Room != nil {
+		roomName = client.Room.Name
+	}
+
+	// parse the message
+	parsedMessage := parseMessage(string(message), roomName)
+
+	// Check if the client has joined a room
+	if client.Room == nil && parsedMessage.Type != CommandMessage {
+		sendMessage(conn, SystemMessage, "You must join a room first. Use /join <roomName>", "system", "")
+		return nil
+	}
+
+	switch parsedMessage.Type {
+	case RegularMessage:
+		log.Printf("[%s]: %s\n", email, parsedMessage.Content)
+		manager.BroadcastMessageToRoom(client.Room.Name, []byte(fmt.Sprintf(parsedMessage.Content)), email)
+
+	case DirectMessage:
+		log.Printf("[DM from %s to %s]: %s\n", email, parsedMessage.Target, parsedMessage.Content)
+		targetClient := manager.FindClientByEmail(parsedMessage.Target)
+		if targetClient != nil {
+			sendMessage(targetClient.Conn, DirectMessage, parsedMessage.Content, email, "")
+		} else {
+			sendMessage(conn, SystemMessage, fmt.Sprintf("User %s not found.", parsedMessage.Target), "system", "")
+		}
+	case CommandMessage:
+		switch parsedMessage.Command {
+		case UsersCommand:
+			var sb strings.Builder
+			for key, val := range manager.Emails {
+				if val {
+					sb.WriteString(key + "\n")
+				}
+			}
+			sendMessage(conn, SystemMessage, sb.String(), "system", "")
+		case JoinCommand:
+			roomName := parsedMessage.Content
+			if err := manager.JoinRoom(roomName, client); err != nil {
+				log.Printf("Failed to join room: %v", err)
+				sendMessage(conn, SystemMessage, "Failed to join room: "+err.Error(), "system", "")
+				return err
+			}
+
+			for _, msg := range client.Room.History {
+				if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+					return fmt.Errorf("error sending history: %w", err)
+				}
+			}
+			// Notify room members
+			manager.BroadcastMessageToRoom(roomName, []byte(fmt.Sprintf("%s has joined the room.", email)), "system")
+		default:
+			sendMessage(conn, SystemMessage, "Invalid command. Use /help for a list of commands.", "system", "")
+		}
+	case InvalidMessage:
+		sendMessage(conn, SystemMessage, parsedMessage.Content, "system", "")
+	}
+	return nil
 }
 
 func handleRegisterUser(db *sql.DB) http.HandlerFunc {

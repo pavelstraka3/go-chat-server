@@ -21,8 +21,8 @@ func validateJWT(tokenString string) (string, error) {
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		username := claims["username"].(string)
-		return username, nil
+		email := claims["email"].(string)
+		return email, nil
 	}
 
 	return "", fmt.Errorf("invalid token")
