@@ -143,7 +143,6 @@ func handleRegisterUser(db *sql.DB) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("User registered successfully"))
 	}
 }
 
