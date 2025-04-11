@@ -5,15 +5,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"log"
+	"time"
 )
 
 type Message struct {
-	Type    MessageType `json:"type"`
-	Content string      `json:"content"`
-	Sender  string      `json:"sender"`
-	Id      string      `json:"id"`
-	Room    string      `json:"room,omitempty"`
-	Target  string      `json:"target,omitempty"`
+	Type      MessageType `json:"type"`
+	Content   string      `json:"content"`
+	Sender    string      `json:"sender"`
+	Id        string      `json:"id"`
+	Room      string      `json:"room,omitempty"`
+	Target    string      `json:"target,omitempty"`
+	Timestamp string      `json:"timestamp,omitempty"`
 }
 
 func generateId() string {
@@ -22,10 +24,11 @@ func generateId() string {
 
 func sendMessage(conn *websocket.Conn, msgType MessageType, content string, user string, room string) error {
 	message := Message{
-		Type:    msgType,
-		Content: content,
-		Sender:  user,
-		Id:      generateId(),
+		Type:      msgType,
+		Content:   content,
+		Sender:    user,
+		Id:        generateId(),
+		Timestamp: time.Now().Format(time.RFC3339),
 	}
 	if msgType != SystemMessage {
 		message.Room = room
