@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -144,4 +145,22 @@ func parseMessage(rawMessage string, room string) ParsedMessage {
 			Content: "Unknown message type.",
 		}
 	}
+}
+
+func saveMessageToDb(db *sql.DB, message ParsedMessage, roomId int, sender string) error {
+	newId := generateId()
+
+	query := `
+	INSERT INTO messages 
+	    (id, room_id, sender, content, date) 
+	VALUES (?, ?, ?, ?, ?);`
+
+	_, err := db.Exec(query, newId, roomId, sender, message.Content, time.Now().Format("2006-01-02 15:04:05"))
+	if err != nil {
+		log.Printf("Error saving message to DB: %v", err)
+		return err
+	}
+
+	log.Printf("Message saved to DB: %s", message.Content)
+	return nil
 }

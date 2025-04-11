@@ -47,14 +47,14 @@ func creatRoomTable(db *sql.DB) {
 
 func createMessageTable(db *sql.DB) {
 	query := `
-		CREATE TABLE IF NOT EXISTS messages (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		room_id INTEGER NOT NULL,
-		sender TEXT NOT NULL,
-		content TEXT NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (room_id) REFERENCES rooms (id)
-	);`
+		CREATE TABLE IF NOT EXISTS messages
+		(
+			id        TEXT PRIMARY KEY,
+			room_id INTEGER NOT NULL,
+			sender TEXT NOT NULL,
+			content   TEXT NOT NULL,
+			date DATE NOT NULL
+		);`
 
 	if _, err := db.Exec(query); err != nil {
 		log.Fatalf("Error creating rooms table: %v", err)

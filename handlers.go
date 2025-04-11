@@ -109,7 +109,11 @@ func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientMa
 	case RegularMessage:
 		log.Printf("[%s]: %s\n", email, parsedMessage.Content)
 		manager.BroadcastMessageToRoom(client.Room.Name, []byte(fmt.Sprintf(parsedMessage.Content)), email)
-
+		err := saveMessageToDb(manager.Db, parsedMessage, client.Room.ID, client.Email)
+		if err != nil {
+			log.Printf("Error saving message to DB: %v", err)
+			sendMessage(conn, SystemMessage, "Error saving message to DB: "+err.Error(), "system", "")
+		}
 	case DirectMessage:
 		log.Printf("[DM from %s to %s]: %s\n", email, parsedMessage.Target, parsedMessage.Content)
 		targetClient := manager.FindClientByEmail(parsedMessage.Target)
