@@ -170,7 +170,7 @@ func saveMessageToDb(db *sql.DB, message ParsedMessage, roomId int, sender strin
 }
 
 func getMessages(db *sql.DB, roomId int, sender string) ([]Message, error) {
-	query := "SELECT messages.id, messages.content, rooms.name, messages.sender, messages.date, room_id roomId FROM messages LEFT JOIN rooms ON messages.room_id = rooms.id WHERE room_id = ?"
+	query := "SELECT messages.id, messages.content, rooms.name, messages.sender, messages.date FROM messages LEFT JOIN rooms ON messages.room_id = rooms.id WHERE room_id = ?"
 	args := []interface{}{roomId}
 
 	if sender != "" {
