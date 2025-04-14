@@ -31,12 +31,15 @@ func main() {
 
 	manager := NewClientManager(db)
 
-	mux.HandleFunc("/ping", ping)
-	mux.HandleFunc("/ws", handleWebSocket(manager))
-	mux.HandleFunc("POST /register", handleRegisterUser(db))
-	mux.HandleFunc("POST /login", handleLoginUser(db))
-	mux.HandleFunc("GET /users", handleGetUsers(db))
-	mux.HandleFunc("GET /messages", handleGetMessages(db))
+	mux.HandleFunc("/api/ping", ping)
+	mux.HandleFunc("/api/ws", handleWebSocket(manager))
+	mux.HandleFunc("POST /api/register", handleRegisterUser(db))
+	mux.HandleFunc("POST /api/login", handleLoginUser(db))
+	mux.HandleFunc("GET /api/users", handleGetUsers(db))
+	mux.HandleFunc("GET /api/messages", handleGetMessages(db))
+
+	// serving react frontend
+	//fs := http.FileServer(http.Dir("build"))
 
 	fmt.Println("Server started on port 8090")
 	if err := http.ListenAndServe(":8090", corsMiddleware(mux)); err != nil {
