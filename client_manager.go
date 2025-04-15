@@ -2,16 +2,20 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"sync"
+	"time"
 )
 
 type Client struct {
-	Email string
-	Conn  *websocket.Conn
-	Room  *Room
+	Email      string
+	Conn       *websocket.Conn
+	Room       *Room
+	IsTyping   bool
+	LastTyping time.Time
 }
 
 type ClientManager struct {
@@ -95,17 +99,17 @@ func (cm *ClientManager) GetOrCreateRoom(roomName string) *Room {
 	return room
 }
 
-func (cm *ClientManager) JoinRoom(roomName string, client *Client) error {
+func (cm *ClientManager) JoinRoom(roomName string, client *Client) (*Room, error) {
 	log.Printf("Attempting to join room: %s for client: %s", roomName, client.Email)
 	dbRoom, err := getRoomByName(cm.Db, roomName)
 	if err != nil {
-		return fmt.Errorf("error getting room from database %s: %v", roomName, err)
+		return nil, fmt.Errorf("error getting room from database %s: %v", roomName, err)
 	}
 
 	if dbRoom == nil {
 		newRoom, err := createRoom(cm.Db, roomName)
 		if err != nil {
-			return fmt.Errorf("error creating room %s: %v", roomName, err)
+			return nil, fmt.Errorf("error creating room %s: %v", roomName, err)
 		}
 		dbRoom = newRoom
 	}
@@ -129,14 +133,14 @@ func (cm *ClientManager) JoinRoom(roomName string, client *Client) error {
 	// Notify other room members
 	for email, roomClient := range room.Clients {
 		if email != client.Email { // Don't notify the client who just joined
-			if err := sendMessage(roomClient.Conn, SystemMessage, fmt.Sprintf("%s has joined the room.", client.Email), "system", roomName); err != nil {
+			if err := sendMessage(roomClient.Conn, SystemMessage, fmt.Sprintf("%s has joined the room.", client.Email), "system", room); err != nil {
 				log.Printf("Error notifying client %s about join: %v\n", email, err)
 			}
 		}
 	}
 
 	log.Printf("Successfully joined room %s", roomName)
-	return nil
+	return room, nil
 }
 
 func (cm *ClientManager) BroadcastMessageToRoom(roomName string, message []byte, user string) {
@@ -154,8 +158,55 @@ func (cm *ClientManager) BroadcastMessageToRoom(roomName string, message []byte,
 	room.History = append(room.History, string(message))
 
 	for _, client := range room.Clients {
-		if err := sendMessage(client.Conn, RegularMessage, string(message), user, roomName); err != nil {
+		if err := sendMessage(client.Conn, RegularMessage, string(message), user, room); err != nil {
 			log.Printf("Error sending message to client %s: %v\n", client.Email, err)
+		}
+	}
+}
+
+func (cm *ClientManager) UpdateClientTypingStatus(client *Client, isTyping bool) {
+	cm.Lock.Lock()
+	defer cm.Lock.Unlock()
+
+	client.IsTyping = isTyping
+	client.LastTyping = time.Now()
+
+	// Don't broadcast if clien is not in room
+	if client.Room == nil {
+		return
+	}
+
+	// Broadcast typing status to other users in the same room
+	for _, roomClient := range client.Room.Clients {
+		// Don't send to yourself
+		if roomClient != client {
+			typingMessage := Message{
+				Type:      TypingMessage,
+				Content:   "",
+				Sender:    client.Email,
+				Id:        generateId(),
+				Timestamp: time.Now().Format(time.RFC3339),
+				Room: Room{
+					Id:   client.Room.Id,
+					Name: client.Room.Name,
+				},
+			}
+
+			if isTyping {
+				typingMessage.Content = "is typing..."
+			} else {
+				typingMessage.Content = "stopped typing"
+			}
+
+			msgBytes, err := json.Marshal(typingMessage)
+			if err != nil {
+				log.Printf("Error marshalling typing message: %v\n", err)
+				continue
+			}
+
+			if err := roomClient.Conn.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
+				log.Printf("Error sending typing message: %v", err)
+			}
 		}
 	}
 }

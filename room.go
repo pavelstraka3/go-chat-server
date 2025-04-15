@@ -5,7 +5,7 @@ import (
 )
 
 type Room struct {
-	ID        int                `json:"id"`
+	Id        int                `json:"id"`
 	Name      string             `json:"name"`
 	CreatedAt string             `json:"created_at,omitempty"`
 	Clients   map[string]*Client `json:"clients,omitempty"`
@@ -37,7 +37,7 @@ func getRoomByName(db *sql.DB, roomName string) (*Room, error) {
 	row := db.QueryRow(query, roomName)
 
 	var room Room
-	err := row.Scan(&room.ID, &room.Name, &room.CreatedAt)
+	err := row.Scan(&room.Id, &room.Name, &room.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -60,7 +60,7 @@ func getAllRooms(db *sql.DB) ([]Room, error) {
 	var rooms []Room
 	for rows.Next() {
 		var room Room
-		if err := rows.Scan(&room.ID, &room.Name, &room.CreatedAt); err != nil {
+		if err := rows.Scan(&room.Id, &room.Name, &room.CreatedAt); err != nil {
 			return nil, err
 		}
 		rooms = append(rooms, room)

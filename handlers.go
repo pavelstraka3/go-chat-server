@@ -56,15 +56,20 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 		}
 		manager.AddClient(clientID, client)
 
-		if err := manager.JoinRoom("general", client); err != nil {
+		room, err := manager.JoinRoom("general", client)
+
+		if err != nil {
 			log.Printf("Error joining room 'general': %v", err)
-			if err := sendMessage(conn, SystemMessage, "Failed to join room: "+err.Error(), "system", ""); err != nil {
+			if err := sendMessage(conn, SystemMessage, "Failed to join room: "+err.Error(), "system", nil); err != nil {
 				log.Printf("Error sending failure message: %v", err)
 			}
 			return
 		}
 
-		sendMessage(conn, SystemMessage, "You have joined the room: general", "system", "general")
+		err = sendMessage(conn, SystemMessage, "You have joined the room: general", "system", room)
+		if err != nil {
+			log.Printf("Error sending message: %v", err)
+		}
 
 		// Listen for messages from client
 		for {
@@ -78,7 +83,7 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 
 			if err := handleClientMessage(conn, client, manager, message, email); err != nil {
 				log.Printf("Error handling message: %v", err)
-				sendMessage(conn, SystemMessage, "Error handling message: "+err.Error(), "system", "error")
+				sendMessage(conn, SystemMessage, "Error handling message: "+err.Error(), "system", room)
 			}
 		}
 
@@ -94,7 +99,13 @@ func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientMa
 
 	// Check if the client has joined a room
 	if client.Room == nil && parsedMessage.Type != CommandMessage {
-		sendMessage(conn, SystemMessage, "You must join a room first. Use /join <roomName>", "system", "")
+		sendMessage(conn, SystemMessage, "You must join a room first. Use /join <roomName>", "system", nil)
+		return nil
+	}
+
+	if parsedMessage.Type == TypingMessage {
+		isTyping := parsedMessage.Content == "true"
+		manager.UpdateClientTypingStatus(client, isTyping)
 		return nil
 	}
 
@@ -102,18 +113,18 @@ func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientMa
 	case RegularMessage:
 		log.Printf("[%s]: %s\n", email, parsedMessage.Content)
 		manager.BroadcastMessageToRoom(client.Room.Name, []byte(fmt.Sprintf(parsedMessage.Content)), email)
-		err := saveMessageToDb(manager.Db, parsedMessage, parsedMessage.Room.ID, client.Email)
+		err := saveMessageToDb(manager.Db, parsedMessage, parsedMessage.Room.Id, client.Email)
 		if err != nil {
 			log.Printf("Error saving message to DB: %v", err)
-			sendMessage(conn, SystemMessage, "Error saving message to DB: "+err.Error(), "system", "")
+			sendMessage(conn, SystemMessage, "Error saving message to DB: "+err.Error(), "system", nil)
 		}
 	case DirectMessage:
 		log.Printf("[DM from %s to %s]: %s\n", email, parsedMessage.Target, parsedMessage.Content)
 		targetClient := manager.FindClientByEmail(parsedMessage.Target)
 		if targetClient != nil {
-			sendMessage(targetClient.Conn, DirectMessage, parsedMessage.Content, email, "")
+			sendMessage(targetClient.Conn, DirectMessage, parsedMessage.Content, email, nil)
 		} else {
-			sendMessage(conn, SystemMessage, fmt.Sprintf("User %s not found.", parsedMessage.Target), "system", "")
+			sendMessage(conn, SystemMessage, fmt.Sprintf("User %s not found.", parsedMessage.Target), "system", nil)
 		}
 	case CommandMessage:
 		switch parsedMessage.Command {
@@ -124,12 +135,12 @@ func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientMa
 					sb.WriteString(key + "\n")
 				}
 			}
-			sendMessage(conn, SystemMessage, sb.String(), "system", "")
+			sendMessage(conn, SystemMessage, sb.String(), "system", nil)
 		case JoinCommand:
 			roomName := parsedMessage.Content
-			if err := manager.JoinRoom(roomName, client); err != nil {
+			if _, err := manager.JoinRoom(roomName, client); err != nil {
 				log.Printf("Failed to join room: %v", err)
-				sendMessage(conn, SystemMessage, "Failed to join room: "+err.Error(), "system", "")
+				sendMessage(conn, SystemMessage, "Failed to join room: "+err.Error(), "system", nil)
 				return err
 			}
 
@@ -141,10 +152,10 @@ func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientMa
 			// Notify room members
 			manager.BroadcastMessageToRoom(roomName, []byte(fmt.Sprintf("%s has joined the room.", email)), "system")
 		default:
-			sendMessage(conn, SystemMessage, "Invalid command. Use /help for a list of commands.", "system", "")
+			sendMessage(conn, SystemMessage, "Invalid command. Use /help for a list of commands.", "system", nil)
 		}
 	case InvalidMessage:
-		sendMessage(conn, SystemMessage, parsedMessage.Content, "system", "")
+		sendMessage(conn, SystemMessage, parsedMessage.Content, "system", nil)
 	}
 	return nil
 }
@@ -241,5 +252,18 @@ func handleGetMessages(db *sql.DB) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(messages)
+	}
+}
+
+func handleGetRooms(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rooms, err := getAllRooms(db)
+		if err != nil {
+			http.Error(w, "Failed to get rooms: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(rooms)
 	}
 }

@@ -24,21 +24,19 @@ func generateId() string {
 	return uuid.New().String()
 }
 
-func sendMessage(conn *websocket.Conn, msgType MessageType, content string, user string, room string) error {
+func sendMessage(conn *websocket.Conn, msgType MessageType, content string, user string, room *Room) error {
 	message := Message{
 		Type:      msgType,
 		Content:   content,
 		Sender:    user,
 		Id:        generateId(),
 		Timestamp: time.Now().Format(time.RFC3339),
+		Room: Room{
+			Name: room.Name,
+			Id:   room.Id,
+		},
 	}
 
-	if msgType != SystemMessage {
-		message.Room = Room{
-			ID:   0,
-			Name: room,
-		}
-	}
 	msgBytes, err := json.Marshal(message)
 	if err != nil {
 		return err
@@ -54,6 +52,7 @@ const (
 	InvalidMessage             = "invalid"
 	CommandMessage             = "command"
 	SystemMessage              = "system"
+	TypingMessage              = "typing"
 )
 
 type CommandType int
@@ -136,6 +135,12 @@ func parseMessage(rawMessage string) Message {
 			Content: message.Content,
 			Room:    message.Room,
 		}
+	case TypingMessage:
+		return Message{
+			Type:    TypingMessage,
+			Content: message.Content,
+			Room:    message.Room,
+		}
 	default:
 		return Message{
 			Type:    InvalidMessage,
@@ -190,7 +195,7 @@ func getMessages(db *sql.DB, roomId int, sender string) ([]Message, error) {
 			Type:    RegularMessage,
 			Content: content,
 			Room: Room{
-				ID:   roomId,
+				Id:   roomId,
 				Name: room,
 			},
 			Sender:    user,
