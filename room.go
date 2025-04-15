@@ -5,11 +5,11 @@ import (
 )
 
 type Room struct {
-	ID        int
-	Name      string
-	CreatedAt string
-	Clients   map[string]*Client
-	History   []string
+	ID        int                `json:"id"`
+	Name      string             `json:"name"`
+	CreatedAt string             `json:"created_at,omitempty"`
+	Clients   map[string]*Client `json:"clients,omitempty"`
+	History   []string           `json:"history,omitempty"`
 }
 
 func createRoom(db *sql.DB, name string) (*Room, error) {
