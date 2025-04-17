@@ -27,7 +27,7 @@ func SpaHandler(staticPath string, indexPath string) http.Handler {
 	fileServer := http.FileServer(http.Dir(staticPath))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get the path, but remove leading slash for Windows compatibility
+		// Get the path
 		urlPath := r.URL.Path
 
 		// Check if the request is for an API endpoint
@@ -38,31 +38,48 @@ func SpaHandler(staticPath string, indexPath string) http.Handler {
 
 		// Convert to OS-specific path format
 		relFilePath := filepath.FromSlash(strings.TrimPrefix(urlPath, "/"))
-
-		// Check if the file exists
 		absFilePath := filepath.Join(staticPath, relFilePath)
 
-		fileInfo, err := os.Stat(absFilePath)
+		// First, try to see if the exact file exists
+		_, err := os.Stat(absFilePath)
 
-		// Debug path processing
-		fmt.Printf("Request URL: %s\n", urlPath)
-		fmt.Printf("Looking for file: %s\n", absFilePath)
+		// If the file exists, serve it with proper MIME type
+		if err == nil {
+			// Set proper MIME types based on file extension
+			ext := filepath.Ext(urlPath)
+			switch strings.ToLower(ext) {
+			case ".js":
+				w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+			case ".mjs":
+				w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+			case ".css":
+				w.Header().Set("Content-Type", "text/css; charset=utf-8")
+			case ".html":
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			case ".json":
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			case ".png":
+				w.Header().Set("Content-Type", "image/png")
+			case ".jpg", ".jpeg":
+				w.Header().Set("Content-Type", "image/jpeg")
+			case ".svg":
+				w.Header().Set("Content-Type", "image/svg+xml")
+			}
 
-		// If file doesn't exist or is a directory, serve index.html
-		if os.IsNotExist(err) || (err == nil && fileInfo.IsDir()) {
-			// Serve the index file
-			indexFile := filepath.Join(staticPath, indexPath)
-			http.ServeFile(w, r, indexFile)
+			fileServer.ServeHTTP(w, r)
 			return
 		}
 
-		// If error other than not exists, log it
-		if err != nil && !os.IsNotExist(err) {
-			fmt.Printf("Error checking file: %v\n", err)
+		// Check if it's a request for a static file (has extension)
+		if filepath.Ext(urlPath) != "" {
+			// If the file doesn't exist, return 404
+			http.NotFound(w, r)
+			return
 		}
 
-		// Otherwise, serve the file
-		fileServer.ServeHTTP(w, r)
+		// For all other routes, serve the index.html
+		indexFile := filepath.Join(staticPath, indexPath)
+		http.ServeFile(w, r, indexFile)
 	})
 }
 
@@ -102,8 +119,8 @@ func main() {
 	mux.HandleFunc("GET /api/messages", handleGetMessages(db))
 	mux.HandleFunc("GET /api/rooms", handleGetRooms(db))
 
-	// Verify build directory exists
-	buildDir := "./build"
+	// Verify static directory exists
+	buildDir := "./static"
 	if _, err := os.Stat(buildDir); os.IsNotExist(err) {
 		fmt.Printf("Warning: Build directory '%s' doesn't exist\n", buildDir)
 		os.Mkdir(buildDir, 0755) // Create it if it doesn't exist

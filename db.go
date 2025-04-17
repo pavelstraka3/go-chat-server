@@ -7,7 +7,7 @@ import (
 )
 
 func connectDB() *sql.DB {
-	db, err := sql.Open("sqlite", "users.db")
+	db, err := sql.Open("sqlite", "./data/main.db")
 
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
