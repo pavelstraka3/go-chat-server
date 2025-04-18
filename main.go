@@ -30,55 +30,69 @@ func SpaHandler(staticPath string, indexPath string) http.Handler {
 		// Get the path
 		urlPath := r.URL.Path
 
+		// Debug logging
+		fmt.Printf("Received request for: %s\n", urlPath)
+
 		// Check if the request is for an API endpoint
 		if strings.HasPrefix(urlPath, "/api") {
 			http.NotFound(w, r)
 			return
 		}
 
+		// Set proper MIME types based on file extension
+		ext := filepath.Ext(urlPath)
+		switch strings.ToLower(ext) {
+		case ".js":
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		case ".mjs":
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		case ".css":
+			w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		case ".html":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		case ".json":
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		case ".png":
+			w.Header().Set("Content-Type", "image/png")
+		case ".jpg", ".jpeg":
+			w.Header().Set("Content-Type", "image/jpeg")
+		case ".svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+		case ".ico":
+			w.Header().Set("Content-Type", "image/x-icon")
+		}
+
 		// Convert to OS-specific path format
 		relFilePath := filepath.FromSlash(strings.TrimPrefix(urlPath, "/"))
 		absFilePath := filepath.Join(staticPath, relFilePath)
 
-		// First, try to see if the exact file exists
-		_, err := os.Stat(absFilePath)
+		// Debug logging
+		fmt.Printf("Looking for file at: %s\n", absFilePath)
 
-		// If the file exists, serve it with proper MIME type
-		if err == nil {
-			// Set proper MIME types based on file extension
-			ext := filepath.Ext(urlPath)
-			switch strings.ToLower(ext) {
-			case ".js":
-				w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-			case ".mjs":
-				w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-			case ".css":
-				w.Header().Set("Content-Type", "text/css; charset=utf-8")
-			case ".html":
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			case ".json":
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			case ".png":
-				w.Header().Set("Content-Type", "image/png")
-			case ".jpg", ".jpeg":
-				w.Header().Set("Content-Type", "image/jpeg")
-			case ".svg":
-				w.Header().Set("Content-Type", "image/svg+xml")
-			}
+		// Check if the file exists
+		fileInfo, err := os.Stat(absFilePath)
 
+		// If the file exists and is not a directory, serve it
+		if err == nil && !fileInfo.IsDir() {
+			fmt.Printf("Found and serving file: %s\n", absFilePath)
 			fileServer.ServeHTTP(w, r)
 			return
 		}
 
-		// Check if it's a request for a static file (has extension)
-		if filepath.Ext(urlPath) != "" {
-			// If the file doesn't exist, return 404
-			http.NotFound(w, r)
-			return
+		// If the request is for a static asset but file doesn't exist,
+		// check in the assets directory
+		if strings.HasPrefix(urlPath, "/assets/") {
+			assetPath := filepath.Join(staticPath, "assets", filepath.Base(urlPath))
+			if _, err := os.Stat(assetPath); err == nil {
+				fmt.Printf("Found and serving asset: %s\n", assetPath)
+				http.ServeFile(w, r, assetPath)
+				return
+			}
 		}
 
-		// For all other routes, serve the index.html
+		// For all other routes, serve index.html
 		indexFile := filepath.Join(staticPath, indexPath)
+		fmt.Printf("Serving index.html for path: %s\n", urlPath)
 		http.ServeFile(w, r, indexFile)
 	})
 }
@@ -93,23 +107,6 @@ func main() {
 	createMessageTable(db)
 
 	manager := NewClientManager(db)
-
-	//go func() {
-	//	typingTimeout := 3 * time.Second
-	//	for {
-	//		time.Sleep(1 * time.Second)
-	//		manager.Lock.Lock()
-	//		now := time.Now()
-	//		for _, client := range manager.Clients {
-	//			if client.IsTyping && now.Sub(client.LastTyping) > typingTimeout {
-	//				// Reset typing status if timeout elapsed
-	//				client.IsTyping = false
-	//				manager.UpdateClientTypingStatus(client, false)
-	//			}
-	//		}
-	//		manager.Lock.Unlock()
-	//	}
-	//}()
 
 	mux.HandleFunc("/api/ping", ping)
 	mux.HandleFunc("/api/ws", handleWebSocket(manager))

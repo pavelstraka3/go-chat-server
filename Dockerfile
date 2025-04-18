@@ -26,7 +26,7 @@ COPY static/ /app/static/
 
 RUN mkdir -p /app/data
 
-ENV DB_PATH=/app/data/database.db
+ENV DB_PATH=/app/data/main.db
 
 EXPOSE 8090
 
