@@ -89,7 +89,7 @@ func handleWebSocket(manager *ClientManager) http.HandlerFunc {
 
 		// Cleanup when the client disconnects
 		manager.RemoveClient(clientID)
-		manager.BroadcastMessage([]byte(fmt.Sprintf("[Server]: %s has left the chat.", email)))
+		sendMessage(conn, SystemMessage, "You have left the chat.", "system", nil)
 	}
 }
 
@@ -144,11 +144,6 @@ func handleClientMessage(conn *websocket.Conn, client *Client, manager *ClientMa
 				return err
 			}
 
-			for _, msg := range client.Room.History {
-				if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
-					return fmt.Errorf("error sending history: %w", err)
-				}
-			}
 			// Notify room members
 			manager.BroadcastMessageToRoom(roomName, []byte(fmt.Sprintf("%s has joined the room.", email)), "system")
 		default:

@@ -10,14 +10,21 @@ import (
 )
 
 type Message struct {
-	Type      MessageType `json:"type"`
-	Content   string      `json:"content"`
-	Sender    string      `json:"sender"`
-	Id        string      `json:"id"`
-	Room      Room        `json:"room,omitempty"`
-	Target    string      `json:"target,omitempty"`
-	Timestamp string      `json:"timestamp,omitempty"`
-	Command   CommandType `json:"command,omitempty"`
+	Type      MessageType       `json:"type"`
+	Content   string            `json:"content"`
+	Sender    string            `json:"sender"`
+	Id        string            `json:"id"`
+	Room      Room              `json:"room,omitempty"`
+	Target    string            `json:"target,omitempty"`
+	Timestamp string            `json:"timestamp,omitempty"`
+	Command   CommandType       `json:"command,omitempty"`
+	Reactions []MessageReaction `json:"reactions,omitempty"`
+}
+
+type MessageReaction struct {
+	Id      string `json:"id"`
+	Content string `json:"content"`
+	Author  string `json:"author"`
 }
 
 func generateId() string {

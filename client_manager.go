@@ -168,6 +168,10 @@ func (cm *ClientManager) UpdateClientTypingStatus(client *Client, isTyping bool)
 	cm.Lock.Lock()
 	defer cm.Lock.Unlock()
 
+	if client.IsTyping == isTyping {
+		return
+	}
+
 	client.IsTyping = isTyping
 	client.LastTyping = time.Now()
 
