@@ -209,9 +209,13 @@ func handleLoginUser(db *sql.DB) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{
+		err = json.NewEncoder(w).Encode(map[string]string{
 			"token": token,
 		})
+		if err != nil {
+			http.Error(w, "Failed to encode token: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -224,7 +228,11 @@ func handleGetUsers(db *sql.DB) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(users)
+		err = json.NewEncoder(w).Encode(users)
+		if err != nil {
+			http.Error(w, "Failed to encode users: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -251,7 +259,11 @@ func handleGetMessages(db *sql.DB) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(messages)
+		err = json.NewEncoder(w).Encode(messages)
+		if err != nil {
+			http.Error(w, "Failed to encode messages: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -264,6 +276,31 @@ func handleGetRooms(db *sql.DB) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(rooms)
+		err = json.NewEncoder(w).Encode(rooms)
+		if err != nil {
+			http.Error(w, "Failed to encode rooms: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+func handleGetOnlineUsers(cm *ClientManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cm.Lock.Lock()
+		defer cm.Lock.Unlock()
+
+		users := make([]string, 0, len(cm.Clients))
+		for clientID, client := range cm.Clients {
+			users = append(users, client.Email)
+			log.Printf("Found online user: %s (ID: %s)", client.Email, clientID)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(users)
+		if err != nil {
+			http.Error(w, "Failed to encode users: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Returning %d online users: %v", len(users), users)
 	}
 }

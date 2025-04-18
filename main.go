@@ -115,6 +115,7 @@ func main() {
 	mux.HandleFunc("GET /api/users", handleGetUsers(db))
 	mux.HandleFunc("GET /api/messages", handleGetMessages(db))
 	mux.HandleFunc("GET /api/rooms", handleGetRooms(db))
+	mux.HandleFunc("GET /api/online-users", handleGetOnlineUsers(manager))
 
 	// Verify static directory exists
 	buildDir := "./static"
